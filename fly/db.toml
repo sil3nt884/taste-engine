@@ -1,0 +1,27 @@
+app = "taste-db"
+primary_region = "lhr"
+
+# Postgres 16 + pgvector (same image as docker-compose). Internal-only: no public
+# port. The API reaches it at taste-db.internal:5432 over Fly private networking;
+# run migrations from your laptop via `fly proxy 5432 -a taste-db` (see DEPLOY.md).
+[build]
+  image = "pgvector/pgvector:pg16"
+
+[env]
+  POSTGRES_USER = "taste"
+  POSTGRES_DB = "taste"
+  PGDATA = "/var/lib/postgresql/data/pgdata"
+  # Debezium CDC (only needed if you go full-live); harmless when unused.
+  POSTGRES_INITDB_ARGS = ""
+
+[mounts]
+  source = "pgdata"
+  destination = "/var/lib/postgresql/data"
+
+# Stateful — do not scale to zero.
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+
+[processes]
+  app = "postgres -c wal_level=logical -c max_wal_senders=4 -c max_replication_slots=4"

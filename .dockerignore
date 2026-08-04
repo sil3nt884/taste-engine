@@ -1,0 +1,13 @@
+node_modules
+web/node_modules
+web/.next
+dist
+.git
+.github
+*.log
+.env
+.env.*
+scratchpad
+tests
+DESIGN.md
+README.md

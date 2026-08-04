@@ -1,0 +1,28 @@
+#app = "taste-ollama"
+#primary_region = "lhr"
+#
+## OPTIONAL — self-hosted LLM so the whole stack lives on Fly. CPU inference is
+## slow and an 8GB machine isn't cheap; for a low-cost demo, prefer offloading to
+## a token API (Groq / OpenAI) instead and delete this app. See fly/DEPLOY.md.
+##
+## The API reaches it at taste-ollama.internal:11434. Pull the model once into the
+## volume: `fly ssh console -a taste-ollama -C "ollama pull llama3.2:3b"` and
+## `... "ollama pull mxbai-embed-large"`.
+#[build]
+#  image = "ollama/ollama:latest"
+#
+#[mounts]
+#  source = "ollama_models"
+#  destination = "/root/.ollama"
+#
+## Big machine for CPU inference. Auto-stops when idle; the first novel query
+## after a stop is slow (the model reloads). Keep a small model.
+#[http_service]
+#  internal_port = 11434
+#  auto_stop_machines = "stop"
+#  auto_start_machines = true
+#  min_machines_running = 0
+#
+#[[vm]]
+#  size = "shared-cpu-4x"
+#  memory = "8192mb"

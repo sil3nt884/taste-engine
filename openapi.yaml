@@ -1,0 +1,518 @@
+openapi: 3.1.0
+info:
+  title: Taste Engine API
+  version: 0.1.0
+  description: >
+    Mood-based anime recommendations plus user accounts and list management.
+    Search matches a natural-language mood query against a mood-labelled catalogue
+    using a hybrid engine (embeddings for coverage + mood tags for negation).
+    Accounts use JWT bearer auth; only the add/remove-list endpoints require it.
+
+servers:
+  - url: http://localhost:8080
+    description: Local dev
+
+tags:
+  - name: Search
+  - name: Catalogue
+  - name: Accounts
+  - name: Import
+  - name: Lists
+
+paths:
+  /media:
+    get:
+      tags: [Catalogue]
+      summary: Paginated catalogue listing
+      description: Plain paginated list of the catalogue, most popular first. Straight Postgres query, no search/mood logic.
+      parameters:
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200':
+          description: One page of the catalogue
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [total, limit, offset, results]
+                properties:
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [media_id, anilistId, title, description, format, episodes, seasonYear, avgScore, popularity]
+                      properties:
+                        media_id: { type: string }
+                        anilistId: { type: integer, description: AniList media id. }
+                        coverImage: { type: [string, 'null'], description: Cached AniList cover-image URL (null until fetched). }
+                        title: { type: [string, 'null'] }
+                        description: { type: string }
+                        format: { type: [string, 'null'] }
+                        episodes: { type: [integer, 'null'] }
+                        seasonYear: { type: [integer, 'null'] }
+                        avgScore: { type: [integer, 'null'] }
+                        popularity: { type: [integer, 'null'] }
+        '400': { $ref: '#/components/responses/ValidationError' }
+
+  /media/{id}:
+    get:
+      tags: [Catalogue]
+      summary: A single catalogue entry by internal id
+      description: >
+        Full record for one title. `coverImage` is the AniList cover URL (cached
+        in the DB, fetched lazily on first read); `null` until it has been fetched.
+      parameters:
+        - $ref: '#/components/parameters/MediaId'
+      responses:
+        '200':
+          description: The catalogue entry
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [media_id, anilistId, title, description, format, episodes, seasonYear, avgScore, popularity]
+                properties:
+                  media_id: { type: string }
+                  anilistId: { type: integer, description: AniList media id. }
+                  coverImage: { type: [string, 'null'], description: Cached AniList cover-image URL (null until fetched). }
+                  title: { type: [string, 'null'] }
+                  titleEnglish: { type: [string, 'null'] }
+                  titleRomaji: { type: [string, 'null'] }
+                  description: { type: string }
+                  format: { type: [string, 'null'] }
+                  status: { type: [string, 'null'] }
+                  episodes: { type: [integer, 'null'] }
+                  season: { type: [string, 'null'] }
+                  seasonYear: { type: [integer, 'null'] }
+                  avgScore: { type: [integer, 'null'] }
+                  popularity: { type: [integer, 'null'] }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404':
+          description: No anime with that id
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /search:
+    post:
+      tags: [Search]
+      summary: Mood-based recommendations
+      description: >
+        Returns recommendations for a natural-language mood query using the hybrid
+        engine (embeddings for coverage + mood tags for negation/precision). Set
+        `explain: false` to return instantly with template reasons and fill the AI
+        `why` lines later via `POST /search/why`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SearchRequest' }
+      responses:
+        '200':
+          description: Ranked recommendations
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Recommendation' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+
+  /search/why:
+    post:
+      tags: [Search]
+      summary: AI reasons for a set of results (async whys)
+      description: >
+        Generates one-line reasons for the given items using the small explainer
+        model. Call after `POST /search` with `explain: false`. Cached per
+        (query, item), so only missing reasons are generated.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WhyRequest' }
+      responses:
+        '200':
+          description: Reasons keyed by media_id
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [whys]
+                properties:
+                  whys:
+                    type: array
+                    items:
+                      type: object
+                      required: [media_id, why]
+                      properties:
+                        media_id: { type: string }
+                        why: { type: string }
+        '400': { $ref: '#/components/responses/ValidationError' }
+
+  /searchCatalog:
+    post:
+      tags: [Search]
+      summary: Plain-text catalogue search (no mood matching)
+      description: >
+        Fast, typo-tolerant full-text search over the catalogue via Meilisearch.
+        Meilisearch ranks; full records are hydrated from Postgres. No mood/embedding
+        matching — this is a straight title/synopsis/tag lookup.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                q: { type: string, default: '' }
+                limit: { type: integer, minimum: 1, maximum: 50, default: 20 }
+                offset: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200':
+          description: Ranked catalogue hits
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [total, results]
+                properties:
+                  total: { type: integer, description: Estimated total matches }
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [media_id, anilistId, title, description, format, episodes, seasonYear, avgScore, popularity]
+                      properties:
+                        media_id: { type: string }
+                        anilistId: { type: integer, description: AniList media id. }
+                        coverImage: { type: [string, 'null'], description: Cached AniList cover-image URL (null until fetched). }
+                        title: { type: [string, 'null'] }
+                        description: { type: string }
+                        format: { type: [string, 'null'] }
+                        episodes: { type: [integer, 'null'] }
+                        seasonYear: { type: [integer, 'null'] }
+                        avgScore: { type: [integer, 'null'] }
+                        popularity: { type: [integer, 'null'] }
+        '400': { $ref: '#/components/responses/ValidationError' }
+
+  /signup:
+    post:
+      tags: [Accounts]
+      summary: Create an account
+      description: >
+        Creates a user. `username`, `emailAddress`, and (if given) `malUsername` /
+        `anilistUser` must each be unique across accounts.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SignupRequest' }
+      responses:
+        '201':
+          description: Account created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, username]
+                properties:
+                  id: { type: string }
+                  username: { type: string }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '409':
+          description: A unique field (username / email / MAL / AniList) is already taken
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /login:
+    post:
+      tags: [Accounts]
+      summary: Log in, receive a JWT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Signed JWT (HS256)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token]
+                properties:
+                  token: { type: string }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401':
+          description: Invalid username or password
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /me/lists:
+    get:
+      tags: [Lists]
+      summary: The caller's own watched + plan-to-watch lists
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: The two lists, most-recent first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [watched, planning]
+                properties:
+                  watched:
+                    type: array
+                    items: { $ref: '#/components/schemas/ListItem' }
+                  planning:
+                    type: array
+                    items: { $ref: '#/components/schemas/ListItem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /add/anime/{id}:
+    post:
+      tags: [Lists]
+      summary: Add an anime to the caller's list
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/MediaId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ListRequest' }
+      responses:
+        '200':
+          description: Added / moved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [media_id, list]
+                properties:
+                  media_id: { type: integer }
+                  list: { $ref: '#/components/schemas/ListName' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: No anime with that id
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /remove/anime/{id}:
+    post:
+      tags: [Lists]
+      summary: Remove an anime from the caller's list
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/MediaId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ListRequest' }
+      responses:
+        '200':
+          description: Removed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [media_id, list, removed]
+                properties:
+                  media_id: { type: integer }
+                  list: { $ref: '#/components/schemas/ListName' }
+                  removed: { type: boolean }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: That anime is not on that list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /import/user:
+    post:
+      tags: [Import]
+      summary: Import an AniList user's lists
+      description: >
+        Public. Fetches the AniList user's completed + plan-to-watch lists, upserts
+        any missing titles into the catalogue, resolves-or-creates the account by
+        AniList handle, records the lists, and rebuilds taste.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ImportRequest' }
+      responses:
+        '201':
+          description: Imported
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created: { type: boolean }
+                  userId: { type: string }
+                  completed: { type: integer }
+                  planToWatch: { type: integer }
+        '400':
+          description: Import failed (message body)
+          content:
+            text/plain: { schema: { type: string } }
+
+  /import/myanimelist:
+    post:
+      tags: [Import]
+      summary: Import a MyAnimeList user's lists
+      description: >
+        Public. Fetches the MAL user's completed + plan-to-watch lists via Jikan,
+        resolves-or-creates the account by MAL username, and records entries that
+        match the catalogue by `media.mal_id`. `matched*` counts the entries that
+        mapped (0 until the catalogue's `mal_id` has been backfilled by an ingest).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ImportRequest' }
+      responses:
+        '201':
+          description: Imported
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created: { type: boolean }
+                  userId: { type: string, description: Account UUID }
+                  completed: { type: integer }
+                  planning: { type: integer }
+                  matchedCompleted: { type: integer }
+                  matchedPlanning: { type: integer }
+        '400':
+          description: Import failed (message body)
+          content:
+            text/plain: { schema: { type: string } }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "JWT from `POST /login`, sent as `Authorization: Bearer <token>"
+  parameters:
+    MediaId:
+      name: id
+      in: path
+      required: true
+      description: Internal catalogue id (the `media_id` from search results).
+      schema: { type: integer, minimum: 1 }
+
+  responses:
+    ValidationError:
+      description: Invalid request body/params
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Missing or invalid bearer token
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          description: Message string, or an array of validation issues.
+
+    ListName:
+      type: string
+      enum: [watched, planning]
+      description: '`watched` → COMPLETED, `planning` → PLANNING.'
+
+    SearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query: { type: string, minLength: 1, description: Natural-language mood request }
+        username: { type: string, description: 'AniList/account handle; personalises ranking and excludes seen titles' }
+        limit: { type: integer, minimum: 1, maximum: 50, default: 20 }
+        explain: { type: boolean, default: true, description: 'false → skip AI why (fast; fill via /search/why)' }
+
+    Recommendation:
+      type: object
+      required: [media_id, title, description, why]
+      properties:
+        media_id: { type: string, description: Internal catalogue id }
+        title: { type: string }
+        description: { type: string, description: Synopsis (HTML stripped) }
+        why: { type: string, description: AI-written or template reason it matches }
+
+    WhyRequest:
+      type: object
+      required: [query, items]
+      properties:
+        query: { type: string, minLength: 1 }
+        items:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: object
+            required: [media_id]
+            properties:
+              media_id: { type: string }
+              title: { type: [string, 'null'] }
+              description: { type: string }
+
+    SignupRequest:
+      type: object
+      required: [username, password, emailAddress]
+      properties:
+        username: { type: string, minLength: 3, maxLength: 50 }
+        password: { type: string, minLength: 8, maxLength: 200, format: password }
+        emailAddress: { type: string, format: email }
+        anilistUser: { type: string, minLength: 1, maxLength: 50 }
+        malUsername: { type: string, minLength: 1, maxLength: 50 }
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string, minLength: 1 }
+        password: { type: string, minLength: 1, format: password }
+
+    ImportRequest:
+      type: object
+      required: [username]
+      properties:
+        username: { type: string, minLength: 1, maxLength: 50, description: The AniList or MyAnimeList handle }
+
+    ListRequest:
+      type: object
+      required: [list]
+      properties:
+        list: { $ref: '#/components/schemas/ListName' }
+
+    ListItem:
+      type: object
+      required: [media_id, title, episodes, avgScore, userScore]
+      properties:
+        media_id: { type: string }
+        coverImage: { type: [string, 'null'], description: Cached AniList cover-image URL (null until fetched). }
+        title: { type: [string, 'null'] }
+        episodes: { type: [integer, 'null'] }
+        avgScore: { type: [integer, 'null'], description: Community average score (0–100) }
+        userScore: { type: [integer, 'null'], description: "The user's own score, if set" }

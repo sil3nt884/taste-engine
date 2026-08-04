@@ -1,0 +1,20 @@
+app = "taste-web"
+primary_region = "lhr"
+
+[build]
+  dockerfile = "fly/Dockerfile.web"
+
+# Secrets set via `fly secrets set` (see fly/DEPLOY.md):
+#   API_BASE_URL = https://taste-api.fly.dev   (the API's public https endpoint)
+#   SITE_URL     = https://taste-web.fly.dev    (or your custom domain)
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

@@ -1,0 +1,21 @@
+{
+  "name": "taste-media-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "database.hostname": "postgres",
+    "database.port": "5432",
+    "database.user": "taste",
+    "database.password": "taste",
+    "database.dbname": "taste",
+    "topic.prefix": "taste",
+    "plugin.name": "pgoutput",
+    "table.include.list": "public.media,public.media_tag,public.media_genre",
+    "publication.autocreate.mode": "filtered",
+    "slot.name": "taste_media_slot",
+    "tombstones.on.delete": "false",
+    "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "false",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter.schemas.enable": "false"
+  }
+}

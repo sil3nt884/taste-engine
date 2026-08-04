@@ -1,0 +1,25 @@
+app = "taste-api"
+primary_region = "lhr"
+
+[build]
+  dockerfile = "fly/Dockerfile.api"
+
+# Non-secret config. Secrets (DATABASE_URL, JWT_SECRET, MEILI_KEY, MEILI_HOST,
+# OLLAMA_HOST) are set with `fly secrets set` — see fly/DEPLOY.md.
+[env]
+  LOG_LEVEL = "info"
+  # If you self-host Ollama on Fly (fly/ollama.toml), use a small CPU model:
+  OLLAMA_MODEL = "llama3.2:3b"
+  EMBED_MODEL = "mxbai-embed-large"
+  EXPLAIN_MODEL = "llama3.2:3b"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0    # scales to zero; first request cold-starts
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"            # bump to 2gb temporarily for `npm run setup`

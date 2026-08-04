@@ -1,0 +1,10 @@
+services:
+  flyway:
+    image: flyway/flyway:11
+    command:
+      - migrate
+      - -url=jdbc:postgresql://postgres:5432/taste
+      - -user=taste
+      - -password=taste
+    volumes:
+      - ./migrations:/flyway/sql
