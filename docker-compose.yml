@@ -24,7 +24,7 @@ services:
   meilisearch:
     image: getmeili/meilisearch:v1.10
     environment:
-      MEILI_MASTER_KEY: masterKeyChangeMe    # must match MEILI_KEY in the app .env
+      MEILI_MASTER_KEY: 61aa444ceac9988e2e6a213d427b16ce2d253f47ce549edb049a37a329aa7bf5  # must match MEILI_KEY in the app .env
       MEILI_NO_ANALYTICS: "true"
     ports: ["7700:7700"]
     volumes: ["meili_data:/meili_data"]

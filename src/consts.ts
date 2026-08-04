@@ -5,6 +5,9 @@ export const KEYLEN = 64 as const
 export const CHUNK_CHARS = 1000 as const
 export const OLLAMA_HOST = `${config.OLLAMA_HOST}/api/embeddings` as const;
 export const ANILIST_PER_PAGE = 50 as const
+// AniList refuses pagination past 5000 entries (returns a 400), even though it
+// keeps reporting hasNextPage. Stop before crossing it.
+export const ANILIST_MAX_ENTRIES = 5000 as const
 
 export const JIKAN_ENDPOINT = 'https://api.jikan.moe/v4' as const;
 export const MEILI_INDEX = 'media' as const;

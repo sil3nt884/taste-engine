@@ -1,6 +1,6 @@
 import { config } from '../config.js';
 import { withTransaction } from '../db.js';
-import {ANILIST_ENDPOINT, ANILIST_PER_PAGE} from "../consts";
+import {ANILIST_ENDPOINT, ANILIST_PER_PAGE, ANILIST_MAX_ENTRIES} from "../consts";
 import {AniListMedia, PageResponse} from "../types";
 
 
@@ -150,6 +150,10 @@ export async function ingestCatalogue(fromPage = 1): Promise<void> {
       `page ${pageInfo.currentPage}/${pageInfo.lastPage} — ${media.length} titles (${total} total)`,
     );
     if (!pageInfo.hasNextPage) break;
+    if (total >= ANILIST_MAX_ENTRIES) {
+      console.log(`reached AniList's ${ANILIST_MAX_ENTRIES}-entry pagination cap — stopping.`);
+      break;
+    }
     page += 1;
     await sleep(delayMs);
   }

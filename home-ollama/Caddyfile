@@ -1,18 +1,17 @@
-# Reverse proxy for a home-hosted Ollama, exposed via DDNS to the Fly API.
+# Local auth-proxy in front of a home-hosted Ollama, fronted by an OUTBOUND tunnel
+# (ngrok or cloudflared). The tunnel provides the public HTTPS URL and reaches
+# Caddy over localhost — so there is NO inbound port-forwarding, no TLS/ACME here,
+# and it works behind CGNAT and inside WSL2 (all of which block inbound hosting).
 #
-# Caddy terminates TLS (auto Let's Encrypt) and rejects any request that lacks the
-# bearer token, so the internet never touches Ollama directly. Ollama itself stays
-# bound to 127.0.0.1:11434 (its default) — do NOT forward port 11434.
+# Chain:  Fly API  ->  https tunnel URL  ->  Caddy :8081 (checks bearer)  ->  Ollama :11434
 #
-# Setup on the home machine:
-#   1. Point DDNS `ollama.yourddns.net` at your home IP; forward ports 80 + 443 here.
-#   2. Replace the hostname below and REPLACE_WITH_OLLAMA_TOKEN with the same value
-#      you set as the `OLLAMA_TOKEN` secret on taste-api.
-#   3. caddy run --config Caddyfile
+# The token is read from the OLLAMA_TOKEN environment variable and must match the
+# OLLAMA_TOKEN secret on taste-api. Set it in Caddy's systemd unit:
+#   sudo systemctl edit caddy   ->   [Service]\nEnvironment=OLLAMA_TOKEN=your-token
 
-ollama.yourddns.net {
+:8081 {
 	# Reject anything without the exact bearer token.
-	@unauthorized not header Authorization "Bearer REPLACE_WITH_OLLAMA_TOKEN"
+	@unauthorized not header Authorization "Bearer {env.OLLAMA_TOKEN}"
 	respond @unauthorized "unauthorized" 401
 
 	reverse_proxy 127.0.0.1:11434 {

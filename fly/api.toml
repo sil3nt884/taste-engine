@@ -2,14 +2,19 @@ app = "taste-api"
 primary_region = "lhr"
 
 [build]
-  dockerfile = "fly/Dockerfile.api"
+  # Path is relative to THIS file's dir (fly/). Deploy with the repo root as build
+  # context: `fly deploy . -c fly/api.toml --dockerfile fly/Dockerfile.api`.
+  dockerfile = "Dockerfile.api"
 
-# Non-secret config. Secrets (DATABASE_URL, JWT_SECRET, MEILI_KEY, MEILI_HOST,
-# OLLAMA_HOST) are set with `fly secrets set` — see fly/DEPLOY.md.
+# Non-secret config only. Secrets (DATABASE_URL, JWT_SECRET, MEILI_HOST,
+# MEILI_KEY, OLLAMA_HOST, OLLAMA_TOKEN) are set with `fly secrets set` — never
+# commit them here. See fly/DEPLOY.md.
 [env]
   LOG_LEVEL = "info"
-  # If you self-host Ollama on Fly (fly/ollama.toml), use a small CPU model:
-  OLLAMA_MODEL = "llama3.2:3b"
+  # Runtime must match what the catalogue was seeded against.
+  ACTIVE_VOCABULARY_VERSION = "4"
+  # These must match models you `ollama pull` on your home box (DEPLOY.md step 5).
+  OLLAMA_MODEL = "llama3.1:8b"
   EMBED_MODEL = "mxbai-embed-large"
   EXPLAIN_MODEL = "llama3.2:3b"
 

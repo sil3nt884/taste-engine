@@ -2,3 +2,6 @@ node_modules
 dist
 .env
 *.log
+
+# Fly deploy — generated secrets, never commit
+fly/.secrets.env

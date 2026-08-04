@@ -2,7 +2,9 @@ app = "taste-web"
 primary_region = "lhr"
 
 [build]
-  dockerfile = "fly/Dockerfile.web"
+  # Path is relative to THIS file's dir (fly/). Deploy with the repo root as build
+  # context: `fly deploy . -c fly/web.toml --dockerfile fly/Dockerfile.web`.
+  dockerfile = "Dockerfile.web"
 
 # Secrets set via `fly secrets set` (see fly/DEPLOY.md):
 #   API_BASE_URL = https://taste-api.fly.dev   (the API's public https endpoint)
