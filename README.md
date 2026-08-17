@@ -3,23 +3,7 @@
 Mood-based anime recommendation over your existing AniList/MAL history.
 Read-only, import-based. See [DESIGN.md](./DESIGN.md) for the full rationale.
 
-## Status
-
-Scaffold. Typechecks and tests pass; the pieces marked below are stubs.
-
-| Area | State |
-|---|---|
-| Schema + migrations | done |
-| Token bucket (Redis Lua, global) | done |
-| Franchise resolution (union-find) | done |
-| Canonicalisation + structural key | done |
-| Scoring query + IDF | done |
-| L1 cache (Redis) | done |
-| L3 extraction (Ollama) | done |
-| Enrichment (local Ollama) | done |
-| L2 cache | blocked on `src/search/embed.ts` |
-| AniList catalogue backfill | done in `src/ingest/anilistAnimeFetch.ts` |
-| Taste model builder | TODO |
+<img width="1262" height="832" alt="Untitled Diagram-Logical system" src="https://github.com/user-attachments/assets/1fe05fdc-1682-4a54-b2bf-82f0bcf6df78" />
 
 ## Run
 
